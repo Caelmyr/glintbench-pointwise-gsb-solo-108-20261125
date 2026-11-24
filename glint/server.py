@@ -80,6 +80,14 @@ def create_app(directory=None):
         _, _, result = measurement(key)
         return download(exports.trace_table(result), "text/csv", "mirror-profile.csv")
 
+    @api.get("/cards/<key>/export/patch.csv")
+    def patch_csv(key):
+        card, image, result = measurement(key)
+        if result.get("check_mode") != "patch" or not result.get("patch") \
+                or result["patch"].get("status") != "ok":
+            raise Invalid("当前没有可用的整片亮片数据，请用整片核对方式保存并重测")
+        return download(exports.patch_table(image, card, result), "text/csv", "mirror-patch.csv")
+
     @api.get("/cards/<key>/export/proof.png")
     def proof(key):
         card, image, result = measurement(key)

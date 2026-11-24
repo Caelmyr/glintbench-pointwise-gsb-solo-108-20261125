@@ -67,7 +67,15 @@ class Cards:
         with self.lock:
             card = self.read(key, integer(value.get("revision"), "工作版本", 1))
             incoming = object_value(value.get("settings", {}), "测光设置")
-            config = optics.settings({**card["settings"], **incoming}, (card["width"], card["height"]))
+            # A mode supplied under any alias, inside settings or at top level,
+            # must override the stored canonical key.
+            aliased = dict(incoming)
+            adopted = optics.incoming_mode(aliased)
+            if adopted is None:
+                adopted = optics.incoming_mode(value)
+            if adopted is not None:
+                aliased["check_mode"] = adopted
+            config = optics.settings({**card["settings"], **aliased}, (card["width"], card["height"]))
             card.update(name=text(value.get("name", card["name"]), "测光卡名称", 80, False),
                         settings=config, revision=card["revision"] + 1)
             self.commit(self.folder(key), card)

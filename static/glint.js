@@ -1,10 +1,30 @@
 "use strict";
 
 const get = (id) => document.getElementById(id);
-const state = {card: null, result: null, photo: null, probe: null, mode: "probe", busy: false};
+const state = {card: null, result: null, photo: null, probe: null, mode: "probe", busy: false, patchPaths: null};
 const settings = [...document.querySelectorAll("[data-setting]")];
 const angle = (number) => number.toFixed(2) + "°";
-const statusText = {pass: "在容差内", miss: "超出容差", outside: "反光点在球外"};
+const statusText = {
+  pass: "合格 · 在容差内",
+  miss: "不合格 · 超出容差",
+  outside: "请重新选点 · 反光点在球外",
+  below_floor: "请重新选点 · 点中像素低于亮区下限",
+  reselect: "请重新选点",
+};
+const statusWord = {
+  pass: "合格",
+  miss: "不合格",
+  outside: "重新选点",
+  below_floor: "重新选点",
+  reselect: "重新选点",
+};
+const statusDetail = {
+  pass: "在容差内",
+  miss: "超出容差",
+  outside: "反光点在球外",
+  below_floor: "点中像素低于亮区下限",
+  reselect: "",
+};
 
 async function api(path, options) {
   const response = await fetch("/glint" + path, options);
@@ -50,15 +70,39 @@ async function library() {
   select.value = state.card?.id || "";
 }
 
+function patchPaths(result) {
+  if (state.patchPaths && state.patchPaths.result === result) return state.patchPaths;
+  const patch = result && result.patch;
+  if (!patch || patch.status !== "ok") {
+    state.patchPaths = {result, sheet: null, over: null};
+    return state.patchPaths;
+  }
+  const sheet = new Path2D();
+  for (const [x, y] of patch.pixels) sheet.rect(x, y, 1, 1);
+  const over = new Path2D();
+  for (const [x, y] of patch.over_pixels) over.rect(x, y, 1, 1);
+  state.patchPaths = {result, sheet, over};
+  return state.patchPaths;
+}
+
 function paintSource() {
   const canvas = get("capture");
   const ctx = canvas.getContext("2d");
-  const {photo, card, probe} = state;
+  const {photo, card, probe, result} = state;
   if (!photo) return;
   canvas.width = card.width;
   canvas.height = card.height;
   ctx.drawImage(photo, 0, 0);
   const cfg = card.settings;
+
+  if (result.check_mode === "patch" && result.patch && result.patch.status === "ok") {
+    const paths = patchPaths(result);
+    ctx.fillStyle = "rgba(132, 226, 203, 0.42)";
+    ctx.fill(paths.sheet);
+    ctx.fillStyle = "rgba(255, 107, 94, 0.66)";
+    ctx.fill(paths.over);
+  }
+
   ctx.lineWidth = Math.max(1, card.width / 550);
   ctx.strokeStyle = "#8ce3cc";
   ctx.beginPath();
@@ -73,6 +117,49 @@ function paintSource() {
   ctx.moveTo(drawn.x, drawn.y - size);
   ctx.lineTo(drawn.x, drawn.y + size);
   ctx.stroke();
+
+  const patch = result.patch;
+  if (result.check_mode === "patch" && patch && patch.status === "ok") {
+    const {center, far_point: far} = patch;
+    ctx.lineWidth = Math.max(1.6, card.width / 420);
+    ctx.strokeStyle = "#ff8a7a";
+    ctx.beginPath();
+    ctx.moveTo(center.x, center.y);
+    ctx.lineTo(far.x, far.y);
+    ctx.stroke();
+    const d = Math.max(5, card.width / 90);
+    ctx.strokeStyle = "#7dffe2";
+    ctx.beginPath();
+    ctx.moveTo(center.x, center.y - d);
+    ctx.lineTo(center.x + d, center.y);
+    ctx.lineTo(center.x, center.y + d);
+    ctx.lineTo(center.x - d, center.y);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(center.x, center.y, d * 1.55, 0, 2 * Math.PI);
+    ctx.stroke();
+    ctx.strokeStyle = "#ff6b5e";
+    ctx.beginPath();
+    ctx.arc(far.x, far.y, d * 0.7, 0, 2 * Math.PI);
+    ctx.stroke();
+    const labelSize = Math.max(11, Math.round(card.width / 52));
+    ctx.font = `600 ${labelSize}px "Glint Noto SC", "Noto Sans CJK SC", sans-serif`;
+    ctx.fillStyle = "#cffff2";
+    ctx.textAlign = "center";
+    ctx.fillText("建议中心", center.x, center.y - d * 2.5);
+    ctx.fillStyle = "#ff9d92";
+    const farLabel = "最远 " + patch.radius_deg.toFixed(1) + "°";
+    if (far.x >= center.x) {
+      ctx.textAlign = "left";
+      ctx.fillText(farLabel, Math.min(far.x + d, card.width - 110), far.y + d * 1.8);
+    } else {
+      ctx.textAlign = "right";
+      ctx.fillText(farLabel, Math.max(far.x - d, 104), far.y + d * 1.8);
+    }
+    ctx.textAlign = "start";
+  }
+
   if (probe) {
     ctx.strokeStyle = "#f4fffc";
     ctx.strokeRect(probe.x - size / 2, probe.y - size / 2, size, size);
@@ -135,6 +222,14 @@ function pointLabel(point) {
   return "(" + point.x + ", " + point.y + ") · " + point.level.toFixed(1) + " · " + direction;
 }
 
+function syncCheckMode(mode) {
+  const hidden = settings.find((field) => field.dataset.setting === "check_mode");
+  if (hidden) hidden.value = mode;
+  document.querySelectorAll("[data-check-mode]").forEach((button) =>
+    button.setAttribute("aria-pressed", String(button.dataset.checkMode === mode)));
+  get("mode-hint").dataset.mode = mode;
+}
+
 function show() {
   const {card, result} = state;
   get("workspace").hidden = false;
@@ -144,6 +239,8 @@ function show() {
   get("dimensions").textContent = card.width + " × " + card.height + " px · " + card.photo_name;
   get("name").value = card.name;
   for (const field of settings) field.value = card.settings[field.dataset.setting];
+  const checkMode = card.settings.check_mode || card.settings.mode || result.check_mode || "point";
+  syncCheckMode(checkMode);
   get("probe-x").max = card.width - 1;
   get("probe-y").max = card.height - 1;
   get("probe-x").value = state.probe?.x ?? result.reading.x;
@@ -153,16 +250,68 @@ function show() {
   get("yaw").textContent = direction ? angle(direction.yaw) : "—";
   get("pitch").textContent = direction ? angle(direction.pitch) : "—";
   get("verdict").dataset.status = result.aim.status;
-  get("verdict").textContent = statusText[result.aim.status];
-  get("gap").textContent = result.aim.error_deg === null ? "球外点没有方向" :
-    "距目标 " + angle(result.aim.error_deg) + " · 容差 " + angle(card.settings.tolerance);
+  const verdict = get("verdict");
+  verdict.replaceChildren();
+  const word = document.createElement("b");
+  word.className = "verdict-word";
+  word.dataset.testid = "verdict-word";
+  word.textContent = statusWord[result.aim.status] || result.aim.status;
+  verdict.append(word);
+  const detailText = statusDetail[result.aim.status];
+  if (detailText) {
+    const detail = document.createElement("span");
+    detail.className = "verdict-detail";
+    detail.textContent = " · " + detailText;
+    verdict.append(detail);
+  }
+  verdict.title = statusText[result.aim.status] || result.aim.status;
+  const patch = result.patch;
+  const patchReady = checkMode === "patch" && patch && patch.status === "ok";
+  get("patch-panel").hidden = !patchReady;
+  const patchCsv = get("patch-csv");
+  patchCsv.hidden = !patchReady;
+  if (patchReady) {
+    get("center-yaw").textContent = angle(patch.center.yaw);
+    get("center-pitch").textContent = angle(patch.center.pitch);
+    get("patch-radius").textContent =
+      "距建议中心最远的亮片角距 " + angle(patch.radius_deg) +
+      "（最远端 " + patch.far_point.x + ", " + patch.far_point.y + "）";
+    get("patch-coverage").textContent =
+      "整片 " + patch.count + " 个实测方向 · 最远端距目标 " + angle(patch.target_worst_deg) +
+      " · 容差 " + angle(card.settings.tolerance) +
+      " · 超标 " + patch.outside_count + "/" + patch.count + " px";
+    const callout = get("patch-callout");
+    if (result.aim.center_in_edge_out) {
+      callout.hidden = false;
+      callout.textContent = "建议中心距目标仅 " + angle(patch.center.target_gap_deg) +
+        "、在容差内，但亮片边缘最远 " + angle(patch.target_worst_deg) +
+        " 已超出 " + angle(card.settings.tolerance) + "，整片仍判不合格。";
+      callout.dataset.tone = "edge";
+    } else if (result.aim.status === "pass") {
+      callout.hidden = false;
+      callout.textContent = "整片所有实测方向都在原目标角度容差内。";
+      callout.dataset.tone = "ok";
+    } else {
+      callout.hidden = true;
+      callout.textContent = "";
+    }
+    get("gap").textContent = "整片最大目标夹角 " + angle(result.aim.error_deg) +
+      " · 容差 " + angle(card.settings.tolerance);
+  } else if (checkMode === "patch" && result.aim.reselect) {
+    get("gap").textContent = result.aim.message || "请重新选点后保存重测";
+  } else {
+    get("gap").textContent = result.aim.error_deg === null ? "球外点没有方向" :
+      "距目标 " + angle(result.aim.error_deg) + " · 容差 " + angle(card.settings.tolerance);
+  }
   get("selected-level").textContent = "亮度 " + result.reading.level.toFixed(1) +
     (result.reading.above_floor ? " · 达到亮区下限" : " · 低于亮区下限");
   for (const [id, filename] of Object.entries({proof: "proof.png", csv: "profile.csv", zip: "observation.zip"})) {
     get(id).href = "/glint" + route("/export/" + filename) + savedQuery();
   }
+  if (patchReady) patchCsv.href = "/glint" + route("/export/patch.csv") + savedQuery();
   paintSource();
   paintChart();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => paintSource());
 }
 
 async function open(card) {
@@ -170,7 +319,7 @@ async function open(card) {
   const photo = new Image();
   photo.src = "/glint" + base + "/capture.png";
   const [result] = await Promise.all([api(base + "/measurement?revision=" + card.revision), photo.decode()]);
-  Object.assign(state, {card, result, photo, probe: null});
+  Object.assign(state, {card, result, photo, probe: null, patchPaths: null});
   get("library").value = card.id;
   show();
 }
@@ -211,6 +360,15 @@ document.querySelectorAll("[data-mode]").forEach((button) => button.addEventList
   document.querySelectorAll("[data-mode]").forEach((item) =>
     item.setAttribute("aria-pressed", String(item === button)));
 }));
+document.querySelectorAll("[data-check-mode]").forEach((button) => button.addEventListener("click", () => {
+  if (!state.card) return;
+  const mode = button.dataset.checkMode;
+  if ((state.card.settings.check_mode || "point") === mode) return;
+  syncCheckMode(mode);
+  // Adopt immediately: persist the mode with the current form values so the
+  // sheet (or single point) remeasures and a reopen keeps the chosen style.
+  action(saveSettings);
+}));
 get("capture").addEventListener("click", (event) => {
   if (!state.card) return;
   const canvas = event.currentTarget;
@@ -230,17 +388,21 @@ get("probe-form").addEventListener("submit", (event) => {
   event.preventDefault();
   action(() => probe(get("probe-x").value, get("probe-y").value));
 });
+async function saveSettings() {
+  const fields = Object.fromEntries(settings.map((field) => [
+    field.dataset.setting,
+    field.dataset.setting === "check_mode" ? field.value : Number(field.value),
+  ]));
+  const card = await api(route(""), {
+    method: "PATCH", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({revision: state.card.revision, name: get("name").value, settings: fields}),
+  });
+  await open(card);
+  await library();
+}
 get("calibration").addEventListener("submit", (event) => {
   event.preventDefault();
-  action(async () => {
-    const fields = Object.fromEntries(settings.map((field) => [field.dataset.setting, Number(field.value)]));
-    const card = await api(route(""), {
-      method: "PATCH", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({revision: state.card.revision, name: get("name").value, settings: fields}),
-    });
-    await open(card);
-    await library();
-  });
+  action(saveSettings);
 });
 get("prepare").addEventListener("click", () => action(async () => {
   const {url} = await api(route("/prepare") + savedQuery(), {method: "POST"});

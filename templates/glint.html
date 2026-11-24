@@ -60,13 +60,32 @@
     <aside class="right">
       <section class="panel readout">
         <div class="panel-head"><h2>已存反光方向</h2><span id="verdict"></span></div>
-        <div class="angular"><div><span>方位</span><strong id="yaw">—</strong></div><div><span>俯仰</span><strong id="pitch">—</strong></div></div>
+        <div class="angular"><div><span>点中方位</span><strong id="yaw">—</strong></div><div><span>点中俯仰</span><strong id="pitch">—</strong></div></div>
         <p id="gap"></p>
         <p id="selected-level"></p>
+        <div id="patch-panel" class="patch-panel" hidden>
+          <div class="patch-head"><b>整片推荐中心</b><span>取实测亮片内像素 · 兼顾最亮核心与角度覆盖</span></div>
+          <div class="angular patch-angles">
+            <div><span>中心方位</span><strong id="center-yaw">—</strong></div>
+            <div><span>中心俯仰</span><strong id="center-pitch">—</strong></div>
+          </div>
+          <p id="patch-radius"></p>
+          <p id="patch-coverage"></p>
+          <p id="patch-callout" class="callout" hidden></p>
+        </div>
       </section>
       <form id="calibration" class="panel settings">
         <div class="panel-head"><div><h2>标定与目标</h2><span>以镜面球中心朝相机为 0°</span></div></div>
         <label class="wide">卡片名称<input id="name" maxlength="80" required></label>
+        <div class="check-mode-row">
+          <span class="check-mode-label">核对方式</span>
+          <div class="modes check-modes" role="group" aria-label="核对方式">
+            <button type="button" data-check-mode="point" aria-pressed="true" data-testid="check-mode-point">单点核对</button>
+            <button type="button" data-check-mode="patch" aria-pressed="false" data-testid="check-mode-patch">整片核对</button>
+          </div>
+          <input type="hidden" data-setting="check_mode" value="point">
+          <p class="mode-hint" id="mode-hint">单点核对只判断保存的反光点；整片核对从该点上下左右四连通长出达标亮片，圆外像素不参与也不连通。点按方式即保存并重测。</p>
+        </div>
         <fieldset><legend>镜球标定 · px</legend><div class="form-grid">
           <label>中心 X<input data-setting="cx" type="number" step="any" min="0" required></label>
           <label>中心 Y<input data-setting="cy" type="number" step="any" min="0" required></label>
@@ -75,7 +94,7 @@
           <label>反光点 Y<input data-setting="seed_y" type="number" step="1" min="0" required></label>
           <label>亮区下限<input data-setting="floor" type="number" step="1" min="1" max="255" required></label>
         </div></fieldset>
-        <fieldset><legend>目标方向 · °</legend><div class="form-grid">
+        <fieldset><legend>目标方向 · °（整片核对时整片所有方向都须在此容差内）</legend><div class="form-grid">
           <label>目标方位<input data-setting="target_yaw" type="number" step="any" min="-180" max="180" required></label>
           <label>目标俯仰<input data-setting="target_pitch" type="number" step="any" min="-90" max="90" required></label>
           <label>目标容差<input data-setting="tolerance" type="number" step="any" min="1" max="90" required></label>
@@ -84,7 +103,7 @@
       </form>
       <section class="panel outputs">
         <div class="panel-head"><h2>交接文件</h2></div>
-        <div><a id="proof" download>PNG 校样 ↓</a><a id="csv" download>CSV 读数 ↓</a><a id="zip" download>ZIP 测光卡 ↓</a></div>
+        <div><a id="proof" download>PNG 校样 ↓</a><a id="csv" download>剖面 CSV ↓</a><a id="patch-csv" download hidden>亮片 CSV ↓</a><a id="zip" download>ZIP 测光卡 ↓</a></div>
         <button id="prepare" type="button">将原片送入照片准备 ↗</button>
       </section>
     </aside>
