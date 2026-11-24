@@ -103,9 +103,9 @@ def sample(image, x, y, config):
     }
 
 
-def aiming(reading, config):
+def aiming(reading, config, calibration=None):
     """Judge the one saved manual reflection against the specified lighting target."""
-    measured = ray(reading["x"], reading["y"], config)
+    measured = ray(reading["x"], reading["y"], calibration or config)
     if measured is None:
         return {"status": "outside", "error_deg": None}
     error = angular_gap(measured, target_ray(config))
@@ -120,6 +120,30 @@ def report(image, config):
     profile = [sample(image, column, y, config) for column in range(left, right)
                if ray(column, y, config) is not None]
     return {"reading": chosen, "aim": aiming(chosen, config), "profile": profile}
+
+
+def rim_preview(image, config):
+    """Refine the coarse hand mark, and only hand back a round that survives every check."""
+    from . import rim
+
+    def judge(x, y, cx, cy, radius):
+        return aiming({"x": x, "y": y}, config, {"cx": cx, "cy": cy, "radius": radius})
+
+    try:
+        outcome = rim.refine(image, config, judge)
+    except (ValueError, FloatingPointError, np.linalg.LinAlgError) as error:
+        raise Invalid("球缘精修无法完成，请检查粗圆位置后重试") from error
+    return {
+        "status": outcome["status"], "reason": outcome["reason"], "adoptable": outcome["adoptable"],
+        "coarse": outcome["coarse"], "candidate": outcome["candidate"],
+        "preview": outcome["preview"], "rivals": outcome["rivals"], "evidence": outcome["evidence"],
+    }
+
+
+def revised(config, candidate):
+    """The saved settings with accepted rim centre and radius written back, point unchanged."""
+    return {**config, "cx": round(candidate["cx"], 2), "cy": round(candidate["cy"], 2),
+            "radius": round(candidate["radius"], 2)}
 
 
 def practice():

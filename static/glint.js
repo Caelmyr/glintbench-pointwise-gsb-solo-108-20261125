@@ -1,7 +1,7 @@
 "use strict";
 
 const get = (id) => document.getElementById(id);
-const state = {card: null, result: null, photo: null, probe: null, mode: "probe", busy: false};
+const state = {card: null, result: null, photo: null, probe: null, mode: "probe", busy: false, rim: null};
 const settings = [...document.querySelectorAll("[data-setting]")];
 const angle = (number) => number.toFixed(2) + "°";
 const statusText = {pass: "在容差内", miss: "超出容差", outside: "反光点在球外"};
@@ -64,6 +64,15 @@ function paintSource() {
   ctx.beginPath();
   ctx.arc(cfg.cx, cfg.cy, cfg.radius, 0, 2 * Math.PI);
   ctx.stroke();
+  if (state.rim?.preview) {
+    const ring = state.rim.preview;
+    ctx.strokeStyle = state.rim.adoptable ? "#f2d16b" : "#d89090";
+    ctx.setLineDash([7, 5]);
+    ctx.beginPath();
+    ctx.arc(ring.cx, ring.cy, ring.radius, 0, 2 * Math.PI);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
   const size = Math.max(6, card.width / 135);
   const drawn = state.result.reading;
   ctx.strokeStyle = "#ffc887";
@@ -158,6 +167,7 @@ function show() {
     "距目标 " + angle(result.aim.error_deg) + " · 容差 " + angle(card.settings.tolerance);
   get("selected-level").textContent = "亮度 " + result.reading.level.toFixed(1) +
     (result.reading.above_floor ? " · 达到亮区下限" : " · 低于亮区下限");
+  showRim();
   for (const [id, filename] of Object.entries({proof: "proof.png", csv: "profile.csv", zip: "observation.zip"})) {
     get(id).href = "/glint" + route("/export/" + filename) + savedQuery();
   }
@@ -165,12 +175,59 @@ function show() {
   paintChart();
 }
 
+function rimSummary(rim) {
+  const parts = ["边缘点 " + rim.evidence.edge_points, "粗圆环带 ±" + Math.round(rim.evidence.band * 100) + "%"];
+  if (rim.preview) {
+    parts.push("确认弧 " + rim.preview.support_bins + "/120 扇区", "象限 " + rim.preview.supported_quadrants + "/4",
+      "贴边误差 " + rim.preview.residual.toFixed(2) + " px");
+  }
+  return parts.join(" · ");
+}
+
+function showRim() {
+  const rim = state.rim;
+  const adopt = get("rim-adopt");
+  get("rim-status").textContent = rim ? (rim.adoptable ? "可以采用的精修圈" : "轮廓不足以定准") : "尚未精修";
+  get("rim-status").dataset.status = rim ? (rim.adoptable ? "adoptable" : "insufficient") : "idle";
+  get("rim-detail").textContent = rim ? rimSummary(rim) : "以手填中心和半径为粗标，向内外各找至多一成半半径的实拍球缘。";
+  const reason = get("rim-reason");
+  if (!rim) {
+    reason.textContent = "";
+    reason.hidden = true;
+  } else if (rim.adoptable) {
+    const aim = rim.candidate?.aim;
+    const verdict = aim ? (aim.status === "pass" ? "在容差内" : "超出容差") : "均可求方向";
+    reason.textContent = "精修圈与已存反光点和目标容差重测" + verdict + (rim.rivals.length > 1 ? "，相近轮廓判定一致" : "") + "。采用后只替换中心和半径。";
+    reason.hidden = false;
+  } else {
+    reason.textContent = rim.reason;
+    reason.hidden = false;
+  }
+  adopt.hidden = !rim?.adoptable;
+}async function rim() {
+  state.rim = await api(route("/rim") + savedQuery());
+  show();
+}
+
+async function adoptRim() {
+  if (!state.rim?.adoptable) return;
+  const fields = Object.fromEntries(settings.map((field) => [field.dataset.setting, Number(field.value)]));
+  const card = await api(route("/rim"), {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({revision: state.card.revision, name: get("name").value, settings: fields,
+                          candidate: state.rim.candidate}),
+  });
+  await open(card);
+  await library();
+  notice("已采用精修圈，中心和半径已填回标定。");
+}
+
 async function open(card) {
   const base = "/cards/" + card.id;
   const photo = new Image();
   photo.src = "/glint" + base + "/capture.png";
   const [result] = await Promise.all([api(base + "/measurement?revision=" + card.revision), photo.decode()]);
-  Object.assign(state, {card, result, photo, probe: null});
+  Object.assign(state, {card, result, photo, probe: null, rim: null});
   get("library").value = card.id;
   show();
 }
@@ -246,4 +303,6 @@ get("prepare").addEventListener("click", () => action(async () => {
   const {url} = await api(route("/prepare") + savedQuery(), {method: "POST"});
   location.assign(url);
 }));
+get("rim-check").addEventListener("click", () => action(rim, "rim-notice"));
+get("rim-adopt").addEventListener("click", () => action(adoptRim, "rim-notice"));
 action(library);

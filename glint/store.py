@@ -73,5 +73,18 @@ class Cards:
             self.commit(self.folder(key), card)
             return card
 
+    def adopt_rim(self, key, candidate, settings, name):
+        """Write an accepted rim refinement into the same saved calibration, keeping the reflection point."""
+        with self.lock:
+            card = self.read(key, integer(candidate.get("revision"), "工作版本", 1))
+            if candidate.get("status") != "adoptable":
+                raise Invalid("这份球缘精修还不能采用")
+            refined = optics.revised(optics.settings({**card["settings"], **object_value(settings, "测光设置")},
+                                                     (card["width"], card["height"])),
+                                     candidate["candidate"])
+            card.update(name=text(name, "测光卡名称", 80, False), settings=refined, revision=card["revision"] + 1)
+            self.commit(self.folder(key), card)
+            return card
+
     def photo(self, key):
         return self.folder(key) / "capture.png"

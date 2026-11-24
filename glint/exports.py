@@ -44,12 +44,14 @@ def proof(image, card, result):
     return png(output)
 
 
-def package(card, capture, image, result):
+def package(card, capture, image, result, rim=None):
     buffer = BytesIO()
     with ZipFile(buffer, "w", ZIP_DEFLATED) as output:
         output.writestr("capture.png", capture)
-        output.writestr("measurement.json", json.dumps({"card": card, "reading": result["reading"],
-                                                        "aim": result["aim"]}, ensure_ascii=False, indent=2))
+        measurement = {"card": card, "reading": result["reading"], "aim": result["aim"]}
+        if rim is not None:
+            measurement["rim"] = rim
+        output.writestr("measurement.json", json.dumps(measurement, ensure_ascii=False, indent=2))
         output.writestr("profile.csv", trace_table(result))
         output.writestr("aim-proof.png", proof(image, card, result))
     return buffer.getvalue()

@@ -72,6 +72,12 @@ h2 { font-size: 14px; letter-spacing: .035em; }
 .settings > button { width: calc(100% - 28px); }
 .outputs > div:nth-child(2) { display: flex; flex-wrap: wrap; gap: 7px 14px; font-size: 12px; color: var(--mint); }
 .outputs > button { font-size: 12px; }
+.rim #rim-status { font-weight: 700; color: var(--dim); }
+.rim #rim-status[data-status="adoptable"] { color: var(--mint); }
+.rim #rim-status[data-status="insufficient"] { color: var(--amber); }
+.rim p { padding: 0 14px 9px; }
+.rim-actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 14px 13px; }
+.rim-actions button { font-size: 12px; }
 .empty { min-height: 415px; display: grid; justify-items: center; align-content: center; padding: 25px; text-align: center; border: 1px solid var(--line); border-radius: 7px; background: radial-gradient(ellipse at center, #21363a,#141f23 58%); }
 .empty-mirror { width: 118px; height: 118px; margin-bottom: 20px; border-radius: 50%; box-shadow: 0 4px 25px #0007; border: 1px solid #456564; background: radial-gradient(ellipse at 60% 33%, #fff9dc 0 4%, #b9d4cb 8%, #3a5e61 20%, #202d31 54%, #0d1617 82%); }
 .empty h2 { font-size: 17px; }
