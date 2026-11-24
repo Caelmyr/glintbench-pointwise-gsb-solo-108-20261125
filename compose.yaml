@@ -1,0 +1,16 @@
+name: solo111-glint
+services:
+  desk:
+    build:
+      context: .
+      args:
+        GLINT_DEPS_IMAGE: ${GLINT_DEPS_IMAGE:-python:3.11-slim}
+    image: ${GLINT_IMAGE:-solo111-glint:1.0}
+    network_mode: bridge
+    ports:
+      - "127.0.0.1:${GLINT_PORT:-19911}:8000"
+    volumes:
+      - measurements:/var/lib/glint
+    init: true
+volumes:
+  measurements:

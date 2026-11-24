@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Glint Bench · 镜球灯位台</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='glint.css') }}">
+  <script defer src="{{ url_for('static', filename='glint.js') }}"></script>
+</head>
+<body>
+<header class="masthead">
+  <a class="brand" href="/"><i></i> GLINT <span>BENCH</span></a>
+  <span class="mast-divider"></span>
+  <span class="mast-label">镜球灯位台</span>
+  <a class="external" href="/prepare">照片准备 ↗</a>
+</header>
+<main>
+  <section class="introduction">
+    <div><h1>影棚灯位校样</h1><p>从镜面球原片读出反光方向，核对灯位目标，再带走交接校样。</p></div>
+    <div class="top-actions">
+      <button id="practice" class="primary" type="button">打开练习镜球</button>
+      <button id="open-import" type="button">导入原片</button>
+    </div>
+  </section>
+  <p id="notice" class="notice" role="status" hidden></p>
+  <section class="library">
+    <label for="library">测光卡</label>
+    <select id="library"><option value="">选取已存卡片</option></select>
+    <span id="origin"></span>
+  </section>
+  <section id="empty" class="empty">
+    <div class="empty-mirror" aria-hidden="true"></div>
+    <h2>选择一张镜面球照片</h2>
+    <p>建议用较长焦距、沿球心拍摄，画面保留清楚的球缘。灯位为相机坐标下的近似方向。</p>
+  </section>
+  <section id="workspace" class="workspace" hidden>
+    <div class="left">
+      <section class="panel source">
+        <div class="panel-head">
+          <div><h2 id="card-title">原片</h2><span id="dimensions"></span></div>
+          <div class="modes" role="group" aria-label="原片点读模式">
+            <button id="probe-mode" data-mode="probe" aria-pressed="true" type="button">点读</button>
+            <button id="mark-mode" data-mode="mark" aria-pressed="false" type="button">选反光点</button>
+          </div>
+        </div>
+        <div class="camera"><canvas id="capture" tabindex="0" aria-label="镜面球原片，点击取样，亦可通过下方输入像素坐标"></canvas></div>
+        <div class="probe">
+          <b>原片点读</b>
+          <form id="probe-form"><label>X <input id="probe-x" type="number" min="0" step="1" required></label>
+            <label>Y <input id="probe-y" type="number" min="0" step="1" required></label>
+            <button type="submit">读取</button></form>
+          <span id="probe-result">选择原片像素</span>
+        </div>
+      </section>
+      <section class="panel profile">
+        <div class="panel-head"><div><h2>选点所在行</h2><span>实测亮度 · 原片像素 X</span></div><span class="legend"><i></i> 亮区下限</span></div>
+        <canvas id="chart" width="820" height="144" aria-label="选中行的实际亮度剖面"></canvas>
+      </section>
+    </div>
+    <aside class="right">
+      <section class="panel readout">
+        <div class="panel-head"><h2>已存反光方向</h2><span id="verdict"></span></div>
+        <div class="angular"><div><span>方位</span><strong id="yaw">—</strong></div><div><span>俯仰</span><strong id="pitch">—</strong></div></div>
+        <p id="gap"></p>
+        <p id="selected-level"></p>
+      </section>
+      <form id="calibration" class="panel settings">
+        <div class="panel-head"><div><h2>标定与目标</h2><span>以镜面球中心朝相机为 0°</span></div></div>
+        <label class="wide">卡片名称<input id="name" maxlength="80" required></label>
+        <fieldset><legend>镜球标定 · px</legend><div class="form-grid">
+          <label>中心 X<input data-setting="cx" type="number" step="any" min="0" required></label>
+          <label>中心 Y<input data-setting="cy" type="number" step="any" min="0" required></label>
+          <label>半径<input data-setting="radius" type="number" step="any" min="4" required></label>
+          <label>反光点 X<input data-setting="seed_x" type="number" step="1" min="0" required></label>
+          <label>反光点 Y<input data-setting="seed_y" type="number" step="1" min="0" required></label>
+          <label>亮区下限<input data-setting="floor" type="number" step="1" min="1" max="255" required></label>
+        </div></fieldset>
+        <fieldset><legend>目标方向 · °</legend><div class="form-grid">
+          <label>目标方位<input data-setting="target_yaw" type="number" step="any" min="-180" max="180" required></label>
+          <label>目标俯仰<input data-setting="target_pitch" type="number" step="any" min="-90" max="90" required></label>
+          <label>目标容差<input data-setting="tolerance" type="number" step="any" min="1" max="90" required></label>
+        </div></fieldset>
+        <button id="save" class="primary" type="submit">保存并重测</button>
+      </form>
+      <section class="panel outputs">
+        <div class="panel-head"><h2>交接文件</h2></div>
+        <div><a id="proof" download>PNG 校样 ↓</a><a id="csv" download>CSV 读数 ↓</a><a id="zip" download>ZIP 测光卡 ↓</a></div>
+        <button id="prepare" type="button">将原片送入照片准备 ↗</button>
+      </section>
+    </aside>
+  </section>
+</main>
+<dialog id="import">
+  <form id="upload">
+    <h2>导入镜面球原片</h2>
+    <label>测光卡名称<input name="name" maxlength="80" required></label>
+    <label>照片<input name="photo" type="file" accept="image/png,image/jpeg,image/webp,image/bmp,image/tiff" required></label>
+    <p id="import-notice" role="status"></p>
+    <div class="top-actions"><button id="cancel-import" type="button">取消</button><button class="primary" type="submit">建立测光卡</button></div>
+  </form>
+</dialog>
+</body>
+</html>
