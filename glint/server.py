@@ -9,7 +9,7 @@ from flask import Blueprint, jsonify, render_template, request, send_file, url_f
 from image_lab import create_app as preparation_app
 from image_lab.validation import Invalid, integer, object_value
 
-from . import exports, optics
+from . import exports, optics, unwrap
 from .store import Cards
 
 
@@ -74,6 +74,28 @@ def create_app(directory=None):
         x = integer(request.args.get("x"), "X", 0, card["width"] - 1)
         y = integer(request.args.get("y"), "Y", 0, card["height"] - 1)
         return jsonify(optics.sample(optics.pixels(cards.photo(key)), x, y, card["settings"]))
+
+    @api.get("/cards/<key>/unwrap")
+    def unwrap_json(key):
+        card = cards.read(key, request.args.get("revision"))
+        image = optics.pixels(cards.photo(key))
+        return jsonify(revision=card["revision"], **unwrap.describe(image, card["settings"]))
+
+    @api.get("/cards/<key>/unwrap/cell")
+    def unwrap_cell(key):
+        card = cards.read(key, request.args.get("revision"))
+        meta = unwrap.describe(optics.pixels(cards.photo(key)), card["settings"])
+        u = integer(request.args.get("u"), "经度格", 0, meta["width"] - 1)
+        v = integer(request.args.get("v"), "纬度格", 0, meta["height"] - 1)
+        image = optics.pixels(cards.photo(key))
+        return jsonify(unwrap.cell(image, card["settings"], u, v))
+
+    @api.get("/cards/<key>/unwrap.png")
+    def unwrap_png(key):
+        card = cards.read(key, request.args.get("revision"))
+        image = optics.pixels(cards.photo(key))
+        return send_file(BytesIO(unwrap.png(image, card["settings"])), mimetype="image/png",
+                         max_age=0, download_name="direction-unwrap.png", as_attachment=True)
 
     @api.get("/cards/<key>/export/profile.csv")
     def profile(key):

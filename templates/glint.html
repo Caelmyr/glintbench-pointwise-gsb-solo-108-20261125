@@ -56,6 +56,11 @@
         <div class="panel-head"><div><h2>选点所在行</h2><span>实测亮度 · 原片像素 X</span></div><span class="legend"><i></i> 亮区下限</span></div>
         <canvas id="chart" width="820" height="144" aria-label="选中行的实际亮度剖面"></canvas>
       </section>
+      <section class="panel unwrap-panel">
+        <div class="panel-head"><div><h2>球面方向展开</h2><span>横向完整一周、纵向 +90° 到 -90° · 点非透明格取回原片像素</span></div><span id="seam-report"></span></div>
+        <div class="unwrap-frame"><canvas id="unwrap" aria-label="镜面球原片的经纬展开图，透明格表示没有实际原片来源"></canvas></div>
+        <p class="unwrap-note" id="unwrap-note"></p>
+      </section>
     </div>
     <aside class="right">
       <section class="panel readout">
@@ -84,7 +89,7 @@
       </form>
       <section class="panel outputs">
         <div class="panel-head"><h2>交接文件</h2></div>
-        <div><a id="proof" download>PNG 校样 ↓</a><a id="csv" download>CSV 读数 ↓</a><a id="zip" download>ZIP 测光卡 ↓</a></div>
+        <div><a id="proof" download>PNG 校样 ↓</a><a id="csv" download>CSV 读数 ↓</a><a id="zip" download>ZIP 测光卡 ↓</a><a id="unwrap-download" download>PNG 方向展开 ↓</a></div>
         <button id="prepare" type="button">将原片送入照片准备 ↗</button>
       </section>
     </aside>

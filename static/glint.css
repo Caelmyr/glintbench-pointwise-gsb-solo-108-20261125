@@ -56,6 +56,11 @@ h2 { font-size: 14px; letter-spacing: .035em; }
 .probe input { width: 52px; height: 25px; padding: 2px 3px; }
 #probe-result { color: var(--mint); }
 #chart { display: block; width: 100%; height: auto; min-height: 105px; }
+.unwrap-frame { display: flex; justify-content: center; padding: 0 14px; }
+#unwrap { display: block; width: 100%; height: auto; cursor: crosshair;
+  background: repeating-conic-gradient(#1d2b2e 0 25%, #162326 0 50%) 0 0 / 16px 16px; }
+.unwrap-panel .panel-head > span { text-align: right; max-width: 46%; }
+.unwrap-note { padding: 9px 14px 11px; font-size: 12px; color: var(--dim); border-top: 1px solid var(--line); }
 .legend i { display: inline-block; width: 14px; margin-right: 4px; border-top: 2px dashed var(--amber); vertical-align: middle; }
 .readout #verdict { font-weight: 700; color: var(--mint); }
 .readout #verdict[data-status="miss"], .readout #verdict[data-status="outside"] { color: var(--amber); }

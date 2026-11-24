@@ -1,10 +1,12 @@
 "use strict";
 
 const get = (id) => document.getElementById(id);
-const state = {card: null, result: null, photo: null, probe: null, mode: "probe", busy: false};
+const state = {card: null, result: null, photo: null, probe: null, mode: "probe", busy: false,
+  unwrap: null, unwrapImage: null};
 const settings = [...document.querySelectorAll("[data-setting]")];
 const angle = (number) => number.toFixed(2) + "°";
 const statusText = {pass: "在容差内", miss: "超出容差", outside: "反光点在球外"};
+const UNWRAP_SCALE = 2;
 
 async function api(path, options) {
   const response = await fetch("/glint" + path, options);
@@ -135,6 +137,56 @@ function pointLabel(point) {
   return "(" + point.x + ", " + point.y + ") · " + point.level.toFixed(1) + " · " + direction;
 }
 
+function cellAt(clientX, clientY) {
+  const canvas = get("unwrap");
+  const meta = state.unwrap;
+  const rect = canvas.getBoundingClientRect();
+  const u = Math.max(0, Math.min(meta.width - 1,
+    Math.floor((clientX - rect.left) * meta.width / rect.width)));
+  const v = Math.max(0, Math.min(meta.height - 1,
+    Math.floor((clientY - rect.top) * meta.height / rect.height)));
+  return {u, v};
+}
+
+function paintUnwrap() {
+  const canvas = get("unwrap");
+  const ctx = canvas.getContext("2d");
+  const meta = state.unwrap;
+  if (!meta) {
+    canvas.width = 2;
+    canvas.height = 2;
+    ctx.clearRect(0, 0, 2, 2);
+    return;
+  }
+  canvas.width = meta.width * UNWRAP_SCALE;
+  canvas.height = meta.height * UNWRAP_SCALE;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (state.unwrapImage) ctx.drawImage(state.unwrapImage, 0, 0, canvas.width, canvas.height);
+  const read = state.result?.reading;
+  if (!read?.direction) return;
+  const span = (read.direction.yaw - meta.seam_yaw_deg + 360) % 360;
+  const u = Math.min(meta.width - 1, Math.floor(span / meta.cell_yaw_deg));
+  const v = Math.min(meta.height - 1, Math.max(0, Math.floor((90 - read.direction.pitch) / meta.cell_pitch_deg)));
+  const x = (u + 0.5) * UNWRAP_SCALE;
+  const y = (v + 0.5) * UNWRAP_SCALE;
+  ctx.strokeStyle = "#f4fffc";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x - 4, y - 4, 8, 8);
+}
+
+function describeUnwrap() {
+  const meta = state.unwrap;
+  if (!meta) return;
+  const percent = meta.transparent_fraction * 100;
+  get("seam-report").textContent = "接缝方位 " + angle(meta.seam_yaw_deg) +
+    " · 离相机背面 " + angle(meta.back_offset_deg);
+  get("unwrap-note").textContent = "共 " + meta.width + " × " + meta.height + " 格（每格 " +
+    meta.cell_yaw_deg.toFixed(2) + "°）· 左端 " + angle(meta.first_yaw_deg) + "，右端 " +
+    angle(meta.last_yaw_deg) + "，右端接回左端 · 透明 " + meta.transparent_cells + " 格（" +
+    (percent < 1 ? percent.toFixed(2) : percent.toFixed(1)) + "%），其余每格都取自标定球内实际原片像素 · " +
+    "接缝限定在相机背面 ±" + meta.seam_limit_deg + "° 内，并按亮区下限优先避开实拍亮部。";
+}
+
 function show() {
   const {card, result} = state;
   get("workspace").hidden = false;
@@ -158,11 +210,25 @@ function show() {
     "距目标 " + angle(result.aim.error_deg) + " · 容差 " + angle(card.settings.tolerance);
   get("selected-level").textContent = "亮度 " + result.reading.level.toFixed(1) +
     (result.reading.above_floor ? " · 达到亮区下限" : " · 低于亮区下限");
-  for (const [id, filename] of Object.entries({proof: "proof.png", csv: "profile.csv", zip: "observation.zip"})) {
-    get(id).href = "/glint" + route("/export/" + filename) + savedQuery();
+  for (const [id, filename] of Object.entries({proof: "export/proof.png", csv: "export/profile.csv",
+    zip: "export/observation.zip", "unwrap-download": "unwrap.png"})) {
+    get(id).href = "/glint" + route("/" + filename) + savedQuery();
   }
   paintSource();
   paintChart();
+  paintUnwrap();
+  describeUnwrap();
+}
+
+async function loadUnwrap() {
+  const meta = await api(route("/unwrap") + savedQuery());
+  const image = new Image();
+  image.src = "/glint" + route("/unwrap.png") + savedQuery();
+  await image.decode();
+  state.unwrap = meta;
+  state.unwrapImage = image;
+  describeUnwrap();
+  paintUnwrap();
 }
 
 async function open(card) {
@@ -170,9 +236,22 @@ async function open(card) {
   const photo = new Image();
   photo.src = "/glint" + base + "/capture.png";
   const [result] = await Promise.all([api(base + "/measurement?revision=" + card.revision), photo.decode()]);
-  Object.assign(state, {card, result, photo, probe: null});
+  Object.assign(state, {card, result, photo, probe: null, unwrap: null, unwrapImage: null});
   get("library").value = card.id;
   show();
+  await loadUnwrap();
+}
+
+async function pickCell(u, v) {
+  const reading = await api(route("/unwrap/cell") + savedQuery() + "&u=" + u + "&v=" + v);
+  if (!reading.opaque) {
+    notice("(" + reading.yaw_deg.toFixed(2) + "°, " + reading.pitch_deg.toFixed(2) +
+      "°) 没有实拍原片来源，反光点保持不变。");
+    return;
+  }
+  settings.find((field) => field.dataset.setting === "seed_x").value = reading.source.x;
+  settings.find((field) => field.dataset.setting === "seed_y").value = reading.source.y;
+  notice("已取回原片像素 (" + reading.source.x + ", " + reading.source.y + ")，保存并重测后更新校样和灯位核对。");
 }
 
 async function probe(x, y) {
@@ -229,6 +308,11 @@ get("capture").addEventListener("click", (event) => {
 get("probe-form").addEventListener("submit", (event) => {
   event.preventDefault();
   action(() => probe(get("probe-x").value, get("probe-y").value));
+});
+get("unwrap").addEventListener("click", (event) => {
+  if (!state.unwrap) return;
+  const {u, v} = cellAt(event.clientX, event.clientY);
+  action(() => pickCell(u, v));
 });
 get("calibration").addEventListener("submit", (event) => {
   event.preventDefault();
